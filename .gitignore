@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Secrets
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Docker
+docker/postgres/data/
+docker/redis/data/
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Testing
+coverage/
+.nyc_output/

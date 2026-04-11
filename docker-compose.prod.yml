@@ -1,0 +1,29 @@
+services:
+  app:
+    build:
+      context: ./app
+      target: runner
+    environment:
+      - NODE_ENV=production
+    volumes: []     # no src mount in prod
+    restart: always
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - app
+    networks:
+      - notes-network
+    restart: always
+
+  postgres:
+    restart: always
+
+  redis:
+    restart: always
