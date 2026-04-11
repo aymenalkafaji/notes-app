@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1775781987326,
+      "tag": "0000_complex_toro",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1775784489171,
+      "tag": "0001_nosy_omega_flight",
+      "breakpoints": true
+    }
+  ]
+}
