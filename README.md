@@ -33,3 +33,4 @@ docker compose exec app pnpm test         # run tests
 
 - [Architecture decisions](docs/adr/)
 - [API reference](docs/api/)
+# notes-app
