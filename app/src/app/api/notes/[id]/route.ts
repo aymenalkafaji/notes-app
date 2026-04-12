@@ -2,6 +2,7 @@ import { requireAuth } from '@/lib/auth/guards'
 import { getNoteById, updateNote, deleteNote } from '@/lib/db/queries'
 import { UpdateNoteSchema } from '@/lib/validations/notes'
 import { successResponse, errorResponse } from '@/lib/utils/api'
+import { publishNoteUpdate } from '@/lib/redis'
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const { session, error } = await requireAuth()
@@ -29,6 +30,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const note = await updateNote(id, session!.user.id!, updateData)
   if (!note) return errorResponse('Note not found', 404)
+    console.log('Publishing update for note:', id)
+
+  await publishNoteUpdate(id, { title: note.title, content: note.content, updatedAt: note.updatedAt })
   return successResponse(note)
 }
 

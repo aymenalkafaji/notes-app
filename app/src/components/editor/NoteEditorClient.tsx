@@ -2,6 +2,7 @@
 import { useCallback, useState, useRef, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { Editor } from './Editor'
+import { PresenceAvatars } from './PresenceAvatars'
 
 interface Props {
   noteId: string
@@ -81,6 +82,11 @@ export function NoteEditorClient({ noteId, initialContent, initialTitle }: Props
   const image = session?.user?.image
   const initials = name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
 
+  const presenceUser = session?.user?.id ? {
+      id: session.user.id,
+      name: session.user.name ?? 'User',
+      image: session.user.image,
+    } : null
   const profileButton = (
     <div style={{ position: 'relative', flexShrink: 0 }}>
       <button

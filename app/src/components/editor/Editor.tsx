@@ -11,6 +11,7 @@ import { useState, useEffect, useRef } from 'react'
 import { LinkButton } from './LinkPopover'
 import { StyleDropdown, FontSizePicker, FontFamilyPicker, ColorPicker } from './TextFormatting'
 import { Extension } from '@tiptap/core'
+import { ShareButton } from './ShareButton'
 
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -216,6 +217,20 @@ export function Editor({ noteId, initialContent, initialTitle, onTitleChange, pr
     }
   }, [title])
 
+  useEffect(() => {
+  const es = new EventSource(`/api/notes/${noteId}/stream`)
+  es.onmessage = (e) => {
+    const data = JSON.parse(e.data)
+    if (data.content && editor && !editor.isFocused) {
+      editor.commands.setContent(data.content)
+    }
+    if (data.title && document.activeElement?.tagName !== 'TEXTAREA') {
+      setTitle(data.title)
+    }
+  }
+  return () => es.close()
+}, [noteId, editor])
+
   function handleTitleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -310,6 +325,7 @@ export function Editor({ noteId, initialContent, initialTitle, onTitleChange, pr
         <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', marginRight: 12 }}>
           {saveStatus === 'saving' ? '● Saving' : saveStatus === 'saved' ? '✓ Saved' : '○ Unsaved'}
         </span>
+        <ShareButton noteId={noteId} />
         {profileButton}
       </div>
 
