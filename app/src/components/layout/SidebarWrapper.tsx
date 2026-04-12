@@ -143,7 +143,7 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
   return (
     <>
       <aside style={{ width: 310, height: '100%', display: 'flex', flexDirection: 'column', flexShrink: 0, background: 'var(--sidebar-bg)', borderRight: '0.5px solid var(--border)' }}>
-        <div style={{ padding: '14px 16px 12px', borderBottom: '0.5px solid var(--border)' }}>
+        <div style={{ padding: '10px 16px 7px', borderBottom: '0.5px solid var(--border)' }}>
           <button onClick={handleNewNote}
             style={{ width: '100%', padding: '11px 14px', background: 'var(--accent)', border: 'none', borderRadius: 10, color: 'var(--accent-text)', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background 0.15s' }}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent-hover)')}
