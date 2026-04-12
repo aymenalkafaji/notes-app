@@ -12,6 +12,8 @@ import { LinkButton } from './LinkPopover'
 import { StyleDropdown, FontSizePicker, FontFamilyPicker, ColorPicker } from './TextFormatting'
 import { Extension } from '@tiptap/core'
 import { ShareButton } from './ShareButton'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
 
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -106,7 +108,6 @@ const STYLE_OPTIONS = [
 function Divider() {
   return <div style={{ width: 1, height: 26, background: 'var(--border)', margin: '0 4px', flexShrink: 0 }} />
 }
-
 function TBtn({ onClick, active, title, children }: { onClick: () => void; active?: boolean; title: string; children: React.ReactNode }) {
   const [hov, setHov] = useState(false)
   return (
@@ -114,6 +115,89 @@ function TBtn({ onClick, active, title, children }: { onClick: () => void; activ
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{ width: 36, height: 36, background: active ? 'var(--active-bg)' : hov ? 'var(--hover)' : 'transparent', border: 'none', borderRadius: 8, cursor: 'pointer', color: active ? 'var(--active-text)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.1s' }}
     >{children}</button>
+  )
+}
+function TaskListButton({ editor }: { editor: ReturnType<typeof useEditor> }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const active = editor?.isActive('taskList') ?? false
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  function removeDone() {
+    if (!editor) return
+    editor.chain().focus().command(({ tr, state, dispatch }) => {
+      if (!dispatch) return true
+      const toDelete: { from: number; to: number }[] = []
+      state.doc.forEach((node, offset) => {
+        if (node.type.name === 'taskList') {
+          node.forEach((item, itemOffset) => {
+            if (item.attrs.checked) {
+              const from = offset + 1 + itemOffset
+              toDelete.push({ from, to: from + item.nodeSize })
+            }
+          })
+        }
+      })
+      toDelete.reverse().forEach(({ from, to }) => tr.delete(from, to))
+      return true
+    }).run()
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <TBtn
+          onClick={() => editor?.chain().focus().toggleTaskList().run()}
+          active={active}
+          title="To-do list"
+        >
+          <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+            <rect x="2" y="4" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+            <polyline points="3.5,6.5 4.5,7.5 6,5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            <line x1="9" y1="6.5" x2="16" y2="6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <rect x="2" y="11" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+            <line x1="9" y1="13.5" x2="16" y2="13.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </TBtn>
+        <button
+          onClick={() => setOpen(o => !o)}
+          style={{ width: 14, height: 36, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, fontSize: 9, marginLeft: -2 }}
+          title="Task list options"
+        >▾</button>
+      </div>
+
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 1000, background: 'var(--menu-bg)', border: '0.5px solid var(--border)', borderRadius: 10, boxShadow: '0 8px 28px rgba(0,0,0,0.13)', minWidth: 190, padding: '4px 0', overflow: 'hidden' }}>
+          <button
+            onClick={() => { editor?.chain().focus().toggleTaskList().run(); setOpen(false) }}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)', fontFamily: 'sans-serif' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/><polyline points="2,5 3,6 4.5,4.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" fill="none"/><line x1="7" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><rect x="1" y="9" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/><line x1="7" y1="11" x2="13" y2="11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            Toggle to-do list
+          </button>
+          <div style={{ height: '0.5px', background: 'var(--border)', margin: '2px 0' }} />
+          <button
+            onClick={removeDone}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#B04040', fontFamily: 'sans-serif' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/><polyline points="2,5 3,6 4.5,4.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" fill="none"/><line x1="6" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><line x1="10" y1="9" x2="13" y2="12" stroke="#B04040" strokeWidth="1.3" strokeLinecap="round"/><line x1="13" y1="9" x2="10" y2="12" stroke="#B04040" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            Remove done items
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -183,6 +267,8 @@ export function Editor({ noteId, initialContent, initialTitle, onTitleChange, pr
   FontFamily,
   Color,
   FontSize,
+  TaskList,
+  TaskItem.configure({ nested: true }),
 ],
 
     content: initialContent ?? undefined,
@@ -301,6 +387,7 @@ export function Editor({ noteId, initialContent, initialTitle, onTitleChange, pr
         <Divider />
         <TBtn onClick={() => editor?.chain().focus().toggleBulletList().run()} active={editor?.isActive('bulletList')} title="Bullet list">{Icon.bullet}</TBtn>
         <TBtn onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={editor?.isActive('orderedList')} title="Numbered list">{Icon.numbered}</TBtn>
+        <TaskListButton editor={editor} />
         <TBtn onClick={() => editor?.chain().focus().toggleBlockquote().run()} active={editor?.isActive('blockquote')} title="Quote">{Icon.quote}</TBtn>
         <TBtn
   onClick={() => {
@@ -423,6 +510,7 @@ export function Editor({ noteId, initialContent, initialTitle, onTitleChange, pr
           onMouseEnter={e => (e.currentTarget.style.background = '#C4845A')}
           onMouseLeave={e => (e.currentTarget.style.background = '#D4956A')}
         >{summarizing ? 'Summarizing...' : '✦ Summarize'}</button>
+        
       </div>
     </div>
   )

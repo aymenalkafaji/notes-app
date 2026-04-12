@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Lora:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -14,34 +14,40 @@ html, body {
 }
 
 :root, [data-theme="light"] {
-  --sidebar-bg: #F2EFE9;
-  --editor-bg: #FDFBF8;
-  --menu-bg: #FDFBF8;
-  --input-bg: #EAE7E0;
-  --hover: #EAE7E0;
+  --topbar-bg: #2C2A26;
+  --topbar-text: #F0EDE8;
+  --topbar-muted: #9C9A94;
+  --sidebar-bg: #F5F2EC;
+  --editor-bg: #FEFCF9;
+  --menu-bg: #FEFCF9;
+  --input-bg: #EDE9E2;
+  --hover: #EDE9E2;
   --active-bg: #EED5B5;
   --active-text: #6B3A10;
   --active-sub: #B87840;
-  --border: #E0DDD8;
-  --border-strong: #C0BDB6;
+  --border: #E4E0D8;
+  --border-strong: #C8C4BC;
   --text-primary: #2C2A26;
   --text-secondary: #3C3A36;
   --text-muted: #9C9890;
   --text-hint: #B0ADA6;
   --title-color: #1C1A17;
   --prose-color: #3C3A36;
-  --toolbar-bg: #FDFBF8;
-  --code-bg: #EAE7E0;
+  --toolbar-bg: #FEFCF9;
+  --code-bg: #EDE9E2;
   --blockquote-border: #D4956A;
-  --accent: #D4956A;
-  --accent-hover: #C4845A;
+  --accent: #C07840;
+  --accent-hover: #A86030;
   --accent-text: #FFF8F2;
-  --accent-glow: rgba(212,149,106,0.35);
+  --accent-glow: rgba(192,120,64,0.3);
 }
 
 [data-theme="dark"] {
+  --topbar-bg: #111009;
+  --topbar-text: #E8E2D8;
+  --topbar-muted: #706860;
   --sidebar-bg: #1A1816;
-  --editor-bg: #111009;
+  --editor-bg: #141210;
   --menu-bg: #201E1B;
   --input-bg: #2A2724;
   --hover: #272421;
@@ -86,6 +92,12 @@ body { background: var(--editor-bg); color: var(--text-primary); }
 .ProseMirror s { color: var(--text-muted); }
 .ProseMirror hr { border: none; border-top: 0.5px solid var(--border); margin: 1.5rem 0; }
 .ProseMirror a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+
+.ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0.5rem; }
+.ProseMirror ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 8px; padding: 2px 0; }
+.ProseMirror ul[data-type="taskList"] li > label { flex-shrink: 0; margin-top: 3px; }
+.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; border-radius: 4px; }
+.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div { text-decoration: line-through; color: var(--text-muted); }
 
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }

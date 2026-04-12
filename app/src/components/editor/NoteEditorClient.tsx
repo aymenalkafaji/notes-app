@@ -14,7 +14,7 @@ export function NoteEditorClient({ noteId, initialContent, initialTitle }: Props
   }, [noteId])
 
   return (
-    <div style={{ width: '100%', height: '100%' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Editor
         noteId={noteId}
         initialContent={initialContent}

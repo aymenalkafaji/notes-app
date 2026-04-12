@@ -3,10 +3,10 @@ import { useState, useRef, useEffect } from 'react'
 
 export function ShareButton({ noteId }: { noteId: string }) {
   const [open, setOpen] = useState(false)
-  const [links, setLinks] = useState<any[]>([])
-  const [creating, setCreating] = useState(false)
-  const [copied, setCopied] = useState<string | null>(null)
+  const [copied, setCopied] = useState<'view' | 'edit' | null>(null)
+  const [loading, setLoading] = useState<'view' | 'edit' | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const [hov, setHov] = useState(false)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -16,50 +16,27 @@ export function ShareButton({ noteId }: { noteId: string }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  async function loadLinks() {
-    const res = await fetch(`/api/share?noteId=${noteId}`)
-    const { data } = await res.json()
-    setLinks(data ?? [])
-  }
-
-  async function handleOpen() {
-    setOpen(o => !o)
-    if (!open) loadLinks()
-  }
-
-  async function createLink(permission: 'view' | 'edit') {
-    setCreating(true)
-    await fetch('/api/share', {
+  async function copyLink(permission: 'view' | 'edit') {
+    setLoading(permission)
+    const res = await fetch('/api/share', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ noteId, permission }),
     })
-    await loadLinks()
-    setCreating(false)
+    const { data } = await res.json()
+    if (data?.token) {
+      const url = `${window.location.origin}/shared/${data.token}`
+      await navigator.clipboard.writeText(url)
+      setCopied(permission)
+      setTimeout(() => { setCopied(null); setOpen(false) }, 2000)
+    }
+    setLoading(null)
   }
-
-  async function deleteLink(id: string) {
-    await fetch('/api/share', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    })
-    await loadLinks()
-  }
-
-  function copyLink(token: string) {
-    const url = `${window.location.origin}/shared/${token}`
-    navigator.clipboard.writeText(url)
-    setCopied(token)
-    setTimeout(() => setCopied(null), 2000)
-  }
-
-  const [hov, setHov] = useState(false)
 
   return (
     <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
       <button
-        onClick={handleOpen}
+        onClick={() => setOpen(o => !o)}
         onMouseEnter={() => setHov(true)}
         onMouseLeave={() => setHov(false)}
         style={{ height: 34, padding: '0 14px', background: hov || open ? 'var(--hover)' : 'transparent', border: '0.5px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
@@ -75,65 +52,46 @@ export function ShareButton({ noteId }: { noteId: string }) {
       </button>
 
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 1000, background: 'var(--menu-bg)', border: '0.5px solid var(--border)', borderRadius: 14, boxShadow: '0 12px 40px rgba(0,0,0,0.15)', minWidth: 300, padding: '16px' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 14 }}>Share this note</div>
-
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 1000, background: 'var(--menu-bg)', border: '0.5px solid var(--border)', borderRadius: 14, boxShadow: '0 12px 40px rgba(0,0,0,0.15)', minWidth: 220, padding: '12px' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Share note</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button
-              onClick={() => createLink('view')}
-              disabled={creating}
-              style={{ flex: 1, padding: '8px', background: 'var(--hover)', border: '0.5px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--active-bg)')}
+              onClick={() => copyLink('view')}
+              disabled={!!loading}
+              style={{ width: '100%', padding: '10px 14px', background: 'var(--hover)', border: '0.5px solid var(--border)', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--input-bg)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'var(--hover)')}
             >
-              + View link
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="6" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
+                <path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
+                  {copied === 'view' ? '✓ Copied!' : loading === 'view' ? 'Generating...' : 'Copy view link'}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>Anyone can read</div>
+              </div>
             </button>
+
             <button
-              onClick={() => createLink('edit')}
-              disabled={creating}
-              style={{ flex: 1, padding: '8px', background: 'var(--accent)', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 500, color: 'var(--accent-text)' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent-hover)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'var(--accent)')}
+              onClick={() => copyLink('edit')}
+              disabled={!!loading}
+              style={{ width: '100%', padding: '10px 14px', background: copied === 'edit' ? 'var(--active-bg)' : 'var(--hover)', border: `0.5px solid ${copied === 'edit' ? 'var(--active-sub)' : 'var(--border)'}`, borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.15s' }}
+              onMouseEnter={e => { if (copied !== 'edit') e.currentTarget.style.background = 'var(--input-bg)' }}
+              onMouseLeave={e => { if (copied !== 'edit') e.currentTarget.style.background = 'var(--hover)' }}
             >
-              + Edit link
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M10.5 2.5L13.5 5.5L6 13H3V10L10.5 2.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+              </svg>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: copied === 'edit' ? 'var(--active-text)' : 'var(--text-primary)' }}>
+                  {copied === 'edit' ? '✓ Copied!' : loading === 'edit' ? 'Generating...' : 'Copy edit link'}
+                </div>
+                <div style={{ fontSize: 11, color: copied === 'edit' ? 'var(--active-sub)' : 'var(--text-muted)', marginTop: 1 }}>Anyone can edit</div>
+              </div>
             </button>
           </div>
-
-          {links.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
-              No share links yet
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {links.map((link: any) => (
-                <div key={link.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--hover)', borderRadius: 8 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: link.permission === 'edit' ? 'var(--accent)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
-                      {link.permission === 'edit' ? 'Can edit' : 'View only'}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {window.location.origin}/shared/{link.token}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => copyLink(link.token)}
-                    style={{ padding: '5px 10px', background: copied === link.token ? 'var(--active-bg)' : 'var(--menu-bg)', border: '0.5px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 500, color: copied === link.token ? 'var(--active-text)' : 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}
-                  >
-                    {copied === link.token ? '✓ Copied' : 'Copy'}
-                  </button>
-                  <button
-                    onClick={() => deleteLink(link.id)}
-                    style={{ width: 26, height: 26, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 5, flexShrink: 0 }}
-                    onMouseEnter={e => (e.currentTarget.style.color = '#B04040')}
-                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
-                    title="Revoke link"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><line x1="2" y1="2" x2="11" y2="11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="11" y1="2" x2="2" y2="11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </div>

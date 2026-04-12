@@ -28,7 +28,7 @@ function UserMenu({ name, email, image, initials, onClose }: {
   }
 
   return (
-    <div ref={ref} style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 300, background: 'var(--menu-bg)', border: '0.5px solid var(--border)', borderRadius: 16, boxShadow: '0 12px 40px rgba(0,0,0,0.15)', minWidth: 250, overflow: 'hidden', padding: '6px 0' }}>
+    <div ref={ref} style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 300, background: 'var(--menu-bg)', border: '0.5px solid var(--border)', borderRadius: 16, boxShadow: '0 12px 40px rgba(0,0,0,0.2)', minWidth: 250, overflow: 'hidden', padding: '6px 0' }}>
       <div style={{ padding: '14px 18px 12px', borderBottom: '0.5px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--active-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: 'var(--active-text)', flexShrink: 0, overflow: 'hidden', border: '2px solid var(--accent)' }}>
           {image ? <img src={image} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
@@ -79,11 +79,11 @@ export function TopBar({ user }: Props) {
   }, [])
 
   return (
-    <div style={{ height: 52, display: 'flex', alignItems: 'center', padding: '0 20px', background: 'var(--sidebar-bg)', borderBottom: '0.5px solid var(--border)', flexShrink: 0, gap: 12, zIndex: 100 }}>
-      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'Georgia, serif', letterSpacing: '-0.5px', lineHeight: 1 }}>
+    <div style={{ height: 52, display: 'flex', alignItems: 'center', padding: '0 20px', background: 'var(--topbar-bg)', flexShrink: 0, gap: 12, zIndex: 100, borderBottom: '0.5px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--topbar-text)', fontFamily: 'Georgia, serif', letterSpacing: '-0.5px', lineHeight: 1 }}>
         Note<span style={{ color: 'var(--accent)' }}>wise</span>
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.01em' }}>
+      <div style={{ fontSize: 11, color: 'var(--topbar-muted)', letterSpacing: '0.02em', marginTop: 1 }}>
         Your AI-powered second brain
       </div>
 
