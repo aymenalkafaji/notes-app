@@ -285,7 +285,7 @@ export function Editor({ noteId, initialContent, initialTitle, onTitleChange, pr
   }
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
 
       <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', height: 56, borderBottom: '0.5px solid var(--border)', flexShrink: 0, background: 'var(--toolbar-bg)', gap: 3, position: 'relative', zIndex: 50 }}>
         <StyleDropdown editor={editor} />
@@ -326,7 +326,6 @@ export function Editor({ noteId, initialContent, initialTitle, onTitleChange, pr
           {saveStatus === 'saving' ? '● Saving' : saveStatus === 'saved' ? '✓ Saved' : '○ Unsaved'}
         </span>
         <ShareButton noteId={noteId} />
-        {profileButton}
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>

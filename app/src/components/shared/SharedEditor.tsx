@@ -118,7 +118,7 @@ export function SharedEditor({ note, token }: { note: any; token: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 57px)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', height: 56, borderBottom: '0.5px solid #E0DDD8', background: '#FDFBF8', gap: 3, flexShrink: 0, overflowX: 'auto', position: 'relative', zIndex: 50 }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', height: 56, borderBottom: '0.5px solid #E0DDD8', background: '#FDFBF8', gap: 3, flexShrink: 0, overflowX: 'visible', position: 'relative', zIndex: 200 }}>
         <StyleDropdown editor={editor} />
         <FontSizePicker editor={editor} />
         <FontFamilyPicker editor={editor} />
