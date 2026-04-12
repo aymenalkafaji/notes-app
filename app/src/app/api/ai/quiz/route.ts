@@ -1,46 +1,30 @@
 import { requireAuth } from '@/lib/auth/guards'
-import { errorResponse } from '@/lib/utils/api'
-import { z } from 'zod'
+import { errorResponse, successResponse } from '@/lib/utils/api'
 
-const QuizSchema = z.object({
-  cards: z.array(z.object({
-    question: z.string(),
-    answer: z.string(),
-  })),
-})
+const GROQ_API_KEY = process.env.GROQ_API_KEY!
 
 export async function POST(req: Request) {
   const { error } = await requireAuth()
   if (error) return error
 
   const { content } = await req.json()
-  if (!content?.trim()) return errorResponse('No content to generate quiz from')
+  if (!content?.trim()) return errorResponse('No content')
 
-  const res = await fetch('http://host.docker.internal:11434/api/generate', {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
     body: JSON.stringify({
-      model: 'llama3.2',
-      prompt: `Generate 5 flashcards from the following note.
-Return ONLY a JSON object, no markdown, no backticks, no explanation.
-Format: {"cards": [{"question": "...", "answer": "..."}]}
-
-Note:
-${content}`,
-      stream: false,
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: `Generate 5 flashcard questions and answers based on the following note. Return ONLY valid JSON with no markdown, no code blocks, no extra text.\n\nFormat: {"cards": [{"question": "...", "answer": "..."}, ...]}\n\nNote:\n${content}` }],
+      max_tokens: 1024,
     }),
   })
-
-  if (!res.ok) return errorResponse('Ollama not running')
-
-  const data = await res.json()
-  const text = data.response ?? ''
+  const json = await res.json()
+  const text = (json.choices?.[0]?.message?.content ?? '').trim().replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim()
 
   try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) return errorResponse('Could not parse response')
-    const parsed = QuizSchema.parse(JSON.parse(jsonMatch[0]))
-    return Response.json({ data: parsed })
+    const data = JSON.parse(text)
+    return successResponse(data)
   } catch {
     return errorResponse('Failed to parse quiz response')
   }
