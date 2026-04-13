@@ -13,6 +13,7 @@ import { Extension } from '@tiptap/core'
 import { ShareButton } from './ShareButton'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
+import { CollabCursor, updateCursors } from './CollabCursor'  
 
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -29,6 +30,10 @@ interface EditorProps {
   initialContent?: object
   initialTitle?: string
   onTitleChange?: (title: string) => void
+  presenceSlot?: React.ReactNode
+  currentUserSlot?: React.ReactNode
+  onSelectionUpdate?: (props: { editor: any }) => void
+  onEditorReady?: (editor: any) => void
 }
 
 interface QuizCard { question: string; answer: string }
@@ -78,13 +83,6 @@ function TaskListButton({ editor }: { editor: ReturnType<typeof useEditor> }) {
   const ref = useRef<HTMLDivElement>(null)
   const active = editor?.isActive('taskList') ?? false
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
 
   function removeDone() {
     if (!editor) return
@@ -157,7 +155,7 @@ const Icon = {
   redo: <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><path d="M14 8C14 5.2 11.8 3 9 3 6.6 3 4.6 4.5 3.8 6.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><polyline points="16,5 14,8 11,7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>,
 }
 
-export function Editor({ noteId, initialContent, initialTitle, onTitleChange }: EditorProps) {
+export function Editor({ noteId, initialContent, initialTitle, onTitleChange, onSelectionUpdate, onEditorReady, presenceSlot, currentUserSlot }: EditorProps) {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
 const [title, setTitle] = useState(initialTitle || '')
 const [summary, setSummary] = useState('')
@@ -167,8 +165,6 @@ const [quizLoading, setQuizLoading] = useState(false)
 const [showQuiz, setShowQuiz] = useState(false)
 const [flipped, setFlipped] = useState<Record<number, boolean>>({})
 const [showTemplates, setShowTemplates] = useState(!initialContent && !initialTitle)
-const [showRewrite, setShowRewrite] = useState(false)
-const [rewriting, setRewriting] = useState(false)
 const titleRef = useRef<HTMLTextAreaElement>(null)
 
   const autoSaveContent = useAutoSave(async (content) => {
@@ -188,23 +184,31 @@ const titleRef = useRef<HTMLTextAreaElement>(null)
 
   const editor = useEditor({
     immediatelyRender: false,
+    onSelectionUpdate: (props: any) => { console.log('selection update', props.editor.state.selection.anchor); onSelectionUpdate?.(props) },
     extensions: [
       StarterKit.configure({ codeBlock: { exitOnTripleEnter: false, exitOnArrowDown: true } }),
       Link, TextStyle, FontFamily, Color, FontSize,
       TaskList, TaskItem.configure({ nested: true }),
+      CollabCursor,
     ],
     content: initialContent ?? undefined,
     editorProps: {
       attributes: { style: 'outline: none; min-height: 400px; font-size: 17px; line-height: 1.9; color: var(--prose-color); font-family: Fraunces, Georgia, serif; caret-color: var(--accent);' },
     },
     onUpdate: ({ editor }) => { setSaveStatus('unsaved'); autoSaveContent(editor.getJSON()) },
-  })
+    
+  }
+)
 
   useEffect(() => {
   if (editor && initialContent && editor.isEmpty) {
     editor.commands.setContent(initialContent)
   }
 }, [editor, initialContent])
+
+  useEffect(() => {
+    if (editor) onEditorReady?.(editor)
+  }, [editor])
 
   useEffect(() => {
     if (editor) {
@@ -228,6 +232,23 @@ const titleRef = useRef<HTMLTextAreaElement>(null)
     }
     return () => es.close()
   }, [noteId, editor])
+
+  useEffect(() => {
+  const onSummarize = () => handleSummarize()
+  const onQuiz = () => handleQuiz()
+  const onRewrite = (e: Event) => {
+    const style = (e as CustomEvent).detail?.style
+    if (style) handleRewrite(style)
+  }
+  window.addEventListener('ai-summarize', onSummarize)
+  window.addEventListener('ai-quiz', onQuiz)
+  window.addEventListener('ai-rewrite', onRewrite)
+  return () => {
+    window.removeEventListener('ai-summarize', onSummarize)
+    window.removeEventListener('ai-quiz', onQuiz)
+    window.removeEventListener('ai-rewrite', onRewrite)
+  }
+}, [editor])
 
   function handleTitleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter') { e.preventDefault(); editor?.commands.focus('start') }
@@ -271,6 +292,21 @@ const titleRef = useRef<HTMLTextAreaElement>(null)
     setQuizLoading(false)
   }
 
+  async function handleRewrite(style: string) {
+  if (!editor) return
+  const text = editor.getText()
+  if (!text.trim()) return
+  try {
+    const res = await fetch('/api/ai/rewrite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: text, style }),
+    })
+    const { doc } = await res.json()
+    if (doc) editor.commands.setContent(doc)
+  } catch {}
+}
+
   const glass: React.CSSProperties = {
     background: 'var(--glass-bg)',
     backdropFilter: 'blur(28px) saturate(180%)',
@@ -309,6 +345,15 @@ const titleRef = useRef<HTMLTextAreaElement>(null)
         <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', marginRight: 10 }}>
           {saveStatus === 'saving' ? '● Saving' : saveStatus === 'saved' ? '✓ Saved' : '○ Unsaved'}
         </span>
+        <TBtn onClick={() => {
+          const next = document.documentElement.getAttribute('data-theme') !== 'dark'
+          document.documentElement.setAttribute('data-theme', next ? 'dark' : 'light')
+          localStorage.setItem('theme', next ? 'dark' : 'light')
+        }} title="Toggle dark mode">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M15 11A7 7 0 016 3a7 7 0 100 12 7 7 0 009-4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+          </svg>
+        </TBtn>
         <ShareButton noteId={noteId} />
       </div>
 
@@ -386,59 +431,8 @@ const titleRef = useRef<HTMLTextAreaElement>(null)
         </div>
       </div>
 
-      {/* AI FLOATING BUTTONS */}
-      <div style={{ position: 'fixed', bottom: 28, right: 28, display: 'flex', gap: 10, zIndex: 100 }}>
-        <button onClick={handleQuiz} disabled={quizLoading}
-          style={{ padding: '10px 18px', background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid var(--glass-border)', borderRadius: 22, fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', cursor: 'pointer', boxShadow: 'var(--glass-shadow)', fontFamily: 'DM Sans, sans-serif' }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'var(--glass-bg-strong)')}
-          onMouseLeave={e => (e.currentTarget.style.background = 'var(--glass-bg)')}
-        >{quizLoading ? 'Generating...' : '🃏 Quiz me'}</button>
-        <button onClick={handleSummarize} disabled={summarizing}
-          style={{ padding: '10px 18px', background: 'var(--accent)', border: 'none', borderRadius: 22, fontSize: 13, fontWeight: 600, color: 'var(--accent-text)', cursor: 'pointer', boxShadow: `0 4px 20px var(--accent-glow)`, fontFamily: 'DM Sans, sans-serif' }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent-hover)')}
-          onMouseLeave={e => (e.currentTarget.style.background = 'var(--accent)')}
-        >{summarizing ? 'Summarizing...' : '✦ Summarize'}</button>
-        <button onClick={() => setShowRewrite(v => !v)}
-          style={{ padding: '10px 18px', background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid var(--glass-border)', borderRadius: 22, fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', cursor: 'pointer', boxShadow: 'var(--glass-shadow)', fontFamily: 'DM Sans, sans-serif' }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'var(--glass-bg-strong)')}
-          onMouseLeave={e => (e.currentTarget.style.background = 'var(--glass-bg)')}
-        >✏️ Rewrite</button>
-        {showRewrite && (
-  <div style={{ position: 'fixed', bottom: 80, right: 28, zIndex: 101, background: 'var(--glass-bg-strong)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid var(--glass-border)', borderRadius: 16, boxShadow: 'var(--glass-shadow-lg)', padding: '12px', minWidth: 200 }}>
-    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 10, letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: 'DM Sans, sans-serif' }}>Rewrite as</div>
-    {[
-      { key: 'professional', label: '💼 Professional' },
-      { key: 'casual', label: '😊 Casual' },
-      { key: 'concise', label: '✂️ Concise' },
-      { key: 'detailed', label: '📖 Detailed' },
-      { key: 'bullet', label: '• Bullet points' },
-    ].map(s => (
-      <button key={s.key}
-        onClick={async () => {
-  if (!editor) return
-  const text = editor.getText()
-  if (!text.trim()) return
-  setRewriting(true)
-  setShowRewrite(false)
-  try {
-    const res = await fetch('/api/ai/rewrite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: text, style: s.key }),
-    })
-    const { doc } = await res.json()
-    if (doc) editor.commands.setContent(doc)
-  } catch {}
-  setRewriting(false)
-}}
-        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)', fontFamily: 'DM Sans, sans-serif', borderRadius: 8 }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover)')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-      >{s.label}</button>
-    ))}
-  </div>
-)}
+     
       </div>
-    </div>
+    
   )
 }

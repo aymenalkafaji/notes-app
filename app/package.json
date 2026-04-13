@@ -23,6 +23,8 @@
     "@google/generative-ai": "^0.24.1",
     "@tiptap/core": "^2.10.0",
     "@tiptap/extension-code-block-lowlight": "^2.10.0",
+    "@tiptap/extension-collaboration": "^3.22.3",
+    "@tiptap/extension-collaboration-cursor": "^2.26.2",
     "@tiptap/extension-color": "^2.27.2",
     "@tiptap/extension-font-family": "^2.27.2",
     "@tiptap/extension-link": "^2.10.0",
@@ -45,10 +47,14 @@
     "next-auth": "5.0.0-beta.22",
     "openai": "^4.72.0",
     "postgres": "^3.4.4",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-view": "^1.41.8",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^2.5.4",
     "use-debounce": "^10.0.4",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.30",
     "zod": "^3.23.8"
   },
   "devDependencies": {

@@ -1,31 +1,29 @@
-// app/api/notes/[id]/presence/route.ts
-import { auth } from '@/lib/auth/config'
 import { redis } from '@/lib/redis'
 import { getUserColor } from '@/lib/presence'
-import type { PresenceUser } from '@/lib/presence'
 
-const PRESENCE_TTL = 15 // seconds
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const session = await auth()
+  const { cursor, name, userId: guestId, anchor, head } = await req.json()
 
-  const { cursor } = await req.json()
-  const userId = session?.user?.id ?? req.headers.get('x-guest-id') ?? 'guest'
-  const name = session?.user?.name ?? 'Guest'
-  const image = session?.user?.image ?? null
+  const userId = guestId ?? 'guest'
 
-  const user: PresenceUser = {
+  const existing = await redis.get(`presence:${id}:${userId}`)
+  const prev = existing ? JSON.parse(existing) : {}
+
+  const user = {
     id: userId,
-    name,
-    image,
+    name: name ?? 'Guest',
     color: getUserColor(userId),
     cursor,
+    anchor: anchor ?? prev.anchor,
+    head: head ?? prev.head,
     lastSeen: Date.now(),
   }
 
   const key = `presence:${id}:${userId}`
-  await redis.setex(key, PRESENCE_TTL, JSON.stringify(user))
+  await redis.setex(key, 15, JSON.stringify(user))
 
   const allKeys = await redis.keys(`presence:${id}:*`)
   const allUsers = await Promise.all(allKeys.map(k => redis.get(k)))
@@ -38,8 +36,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const session = await auth()
-  const userId = session?.user?.id ?? 'guest'
+  const body = await req.json().catch(() => ({}))
+  const userId = body.userId ?? 'guest'
   await redis.del(`presence:${id}:${userId}`)
   return Response.json({ ok: true })
 }

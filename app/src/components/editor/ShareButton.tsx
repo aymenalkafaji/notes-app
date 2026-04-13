@@ -48,7 +48,7 @@ export function ShareButton({ noteId }: { noteId: string }) {
           <line x1="4.8" y1="6.5" x2="10.2" y2="4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
           <line x1="4.8" y1="8.5" x2="10.2" y2="11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
         </svg>
-        Share
+        Colaborate
       </button>
 
       {open && (
