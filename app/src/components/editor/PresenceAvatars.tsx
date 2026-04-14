@@ -12,7 +12,7 @@ export interface PresenceUser {
   lastSeen: number
 }
 
-const COLORS = ['#E85D04','#7209B7','#3A0CA3','#4361EE','#06D6A0','#F72585','#B5179E','#4CC9F0']
+const COLORS = ['#C07840','#A06848','#7A6050','#8C7A5A','#6A8068','#7A6880','#A07858','#8A7048']
 
 function getColor(id: string) {
   let h = 0
@@ -84,7 +84,7 @@ export function PresenceAvatars({ noteId, currentUser, onCursorUpdate }: {
     }
 
     sendPresence()
-    heartbeatRef.current = setInterval(() => sendPresence(), 5000)
+    heartbeatRef.current = setInterval(() => sendPresence(), 60_000)
 
     const handleLeave = () => {
       fetch(`/api/notes/${noteId}/presence`, {
@@ -99,7 +99,8 @@ export function PresenceAvatars({ noteId, currentUser, onCursorUpdate }: {
       esRef.current?.close()
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
       window.removeEventListener('beforeunload', handleLeave)
-      handleLeave()
+      // Do NOT call handleLeave here — navigating to another note should not
+      // clear presence. The 30-min TTL handles inactivity expiry.
     }
   }, [noteId, sendPresence, onCursorUpdate])
 

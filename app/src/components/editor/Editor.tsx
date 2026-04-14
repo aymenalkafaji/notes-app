@@ -166,6 +166,12 @@ const [showQuiz, setShowQuiz] = useState(false)
 const [flipped, setFlipped] = useState<Record<number, boolean>>({})
 const [showTemplates, setShowTemplates] = useState(!initialContent && !initialTitle)
 const titleRef = useRef<HTMLTextAreaElement>(null)
+const [isListening, setIsListening] = useState(false)
+const [isTranscribing, setIsTranscribing] = useState(false)
+const recorderRef = useRef<MediaRecorder | null>(null)
+const streamRef = useRef<MediaStream | null>(null)
+const chunksRef = useRef<Blob[]>([])
+const chunkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const autoSaveContent = useAutoSave(async (content) => {
     setSaveStatus('saving')
@@ -205,6 +211,10 @@ const titleRef = useRef<HTMLTextAreaElement>(null)
     editor.commands.setContent(initialContent)
   }
 }, [editor, initialContent])
+
+  useEffect(() => {
+    return () => { stopListening() }
+  }, [])
 
   useEffect(() => {
     if (editor) onEditorReady?.(editor)
@@ -307,6 +317,85 @@ const titleRef = useRef<HTMLTextAreaElement>(null)
   } catch {}
 }
 
+  function stopListening() {
+    if (chunkTimerRef.current) { clearTimeout(chunkTimerRef.current); chunkTimerRef.current = null }
+    recorderRef.current?.stop()
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    recorderRef.current = null
+    streamRef.current = null
+    chunksRef.current = []
+    setIsListening(false)
+    setIsTranscribing(false)
+  }
+
+  async function transcribeChunk(blob: Blob) {
+    if (blob.size < 1000) return // skip near-empty chunks
+    setIsTranscribing(true)
+    try {
+      const form = new FormData()
+      form.append('audio', blob, 'chunk.webm')
+      const res = await fetch('/api/ai/transcribe', { method: 'POST', body: form })
+      if (!res.ok) return
+      const { text } = await res.json()
+      if (text?.trim()) editor?.chain().focus().insertContent(text.trim() + ' ').run()
+    } catch {}
+    setIsTranscribing(false)
+  }
+
+  async function startListening() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 },
+      })
+      streamRef.current = stream
+      stream.getAudioTracks()[0]?.addEventListener('ended', stopListening)
+
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/mp4'
+
+      const recorder = new MediaRecorder(stream, { mimeType })
+      recorderRef.current = recorder
+      chunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
+
+      // Flush and transcribe every 8 seconds
+      function scheduleFlush() {
+        chunkTimerRef.current = setTimeout(async () => {
+          if (!recorderRef.current) return
+          recorderRef.current.stop()
+          await new Promise<void>(r => { recorderRef.current!.onstop = () => r() })
+          const blob = new Blob(chunksRef.current, { type: mimeType })
+          chunksRef.current = []
+          transcribeChunk(blob)
+          // Restart recording for the next chunk
+          const rec = new MediaRecorder(streamRef.current!, { mimeType })
+          recorderRef.current = rec
+          rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+          rec.start(250)
+          scheduleFlush()
+        }, 8000)
+      }
+
+      recorder.start(250)
+      setIsListening(true)
+      scheduleFlush()
+    } catch (err: any) {
+      if (err?.name !== 'NotAllowedError') console.error(err)
+      stopListening()
+    }
+  }
+
+  function toggleListening() {
+    if (isListening) stopListening()
+    else startListening()
+  }
+
   const glass: React.CSSProperties = {
     background: 'var(--glass-bg)',
     backdropFilter: 'blur(28px) saturate(180%)',
@@ -319,7 +408,7 @@ const titleRef = useRef<HTMLTextAreaElement>(null)
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 8, height: '100%' }}>
 
       {/* TOOLBAR ISLAND */}
-      <div style={{ ...glass, borderRadius: 20, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', height: 56, gap: 3, position: 'relative', zIndex: 50 }}>
+      <div style={{ ...glass, borderBottom: '1px solid transparent', borderRadius: 20, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', height: 56, gap: 3, position: 'relative', zIndex: 50 }}>
         <StyleDropdown editor={editor} />
         <FontSizePicker editor={editor} />
         <FontFamilyPicker editor={editor} />
@@ -342,6 +431,23 @@ const titleRef = useRef<HTMLTextAreaElement>(null)
         <TBtn onClick={() => editor?.chain().focus().undo().run()} title="Undo">{Icon.undo}</TBtn>
         <TBtn onClick={() => editor?.chain().focus().redo().run()} title="Redo">{Icon.redo}</TBtn>
         <div style={{ flex: 1 }} />
+
+        {/* MIC BUTTON */}
+        <TBtn onClick={toggleListening} active={isListening} title={isListening ? 'Stop transcribing' : 'Transcribe (microphone)'}>
+          {isListening ? (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ animation: 'mic-pulse 1.4s ease-in-out infinite' }}>
+              <rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/>
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <rect x="6" y="1" width="6" height="9" rx="3" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M3.5 9.5c0 3 2.5 5 5.5 5s5.5-2 5.5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <line x1="9" y1="14.5" x2="9" y2="17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <line x1="6.5" y1="17" x2="11.5" y2="17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          )}
+        </TBtn>
+
         <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', marginRight: 10 }}>
           {saveStatus === 'saving' ? '● Saving' : saveStatus === 'saved' ? '✓ Saved' : '○ Unsaved'}
         </span>
@@ -358,7 +464,16 @@ const titleRef = useRef<HTMLTextAreaElement>(null)
       </div>
 
       {/* EDITOR BODY ISLAND */}
-      <div style={{ ...glass, borderRadius: 20, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ ...glass, borderTop: '1px solid transparent', borderRadius: 20, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
+
+        {/* RECORDING / TRANSCRIBING PILL */}
+        {isListening && (
+          <div style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 10, background: 'var(--glass-bg-strong)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid var(--glass-border)', borderRadius: 20, padding: '8px 18px', fontSize: 13, color: 'var(--text-muted)', fontFamily: 'DM Sans, sans-serif', display: 'flex', alignItems: 'center', gap: 8, pointerEvents: 'none', boxShadow: 'var(--glass-shadow)', whiteSpace: 'nowrap' }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: isTranscribing ? 'var(--accent)' : '#E05050', display: 'inline-block', flexShrink: 0, animation: 'mic-pulse 1.2s ease-in-out infinite' }} />
+            {isTranscribing ? 'Transcribing…' : 'Listening — transcribes every 8 s'}
+          </div>
+        )}
+
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <div style={{ maxWidth: 780, margin: '0 auto', padding: '52px 64px 160px' }}>
 
@@ -431,8 +546,6 @@ const titleRef = useRef<HTMLTextAreaElement>(null)
         </div>
       </div>
 
-     
-      </div>
-    
+    </div>
   )
 }

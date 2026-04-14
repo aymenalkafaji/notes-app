@@ -144,6 +144,7 @@ export function SidebarWrapper({ children, onSummarize, onQuiz, onRewrite, summa
   const [searchResults, setSearchResults] = useState<Note[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [notes, setNotes] = useState<Note[]>([])
+  const [sharedNotes, setSharedNotes] = useState<{ id: string; title: string; updatedAt: Date | string; token: string | null; activeUsers: number }[]>([])
   const [menuNoteId, setMenuNoteId] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(false)
   const currentNoteId = pathname.startsWith('/notes/') ? pathname.split('/notes/')[1] ?? null : null
@@ -185,11 +186,26 @@ export function SidebarWrapper({ children, onSummarize, onQuiz, onRewrite, summa
 
   const fetchNotes = useCallback(async () => {
     const res = await fetch('/api/notes')
+    if (!res.ok) return
     const { data } = await res.json()
     setNotes(data ?? [])
   }, [])
 
-  useEffect(() => { fetchNotes() }, [fetchNotes, pathname])
+  const fetchSharedNotes = useCallback(async () => {
+    try {
+      const res = await fetch('/api/notes/shared')
+      const json = await res.json()
+      setSharedNotes(json.data ?? [])
+    } catch {}
+  }, [])
+
+  useEffect(() => { fetchNotes(); fetchSharedNotes() }, [fetchNotes, fetchSharedNotes, pathname])
+
+  // Poll collaboration presence every 30 s
+  useEffect(() => {
+    const id = setInterval(fetchSharedNotes, 30_000)
+    return () => clearInterval(id)
+  }, [fetchSharedNotes])
 
   async function handleNewNote() {
     const note = await createNote()
@@ -252,9 +268,9 @@ export function SidebarWrapper({ children, onSummarize, onQuiz, onRewrite, summa
           </div>
         </div>
         <button onClick={(e) => { e.stopPropagation(); setMenuNoteId(isMenuOpen ? null : note.id) }}
-          style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: isMenuOpen ? 'var(--hover)' : 'rgba(100,80,60,0.1)', border: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-secondary)', padding: '3px 7px', borderRadius: 7, fontSize: 14, lineHeight: 1, letterSpacing: '1px', transition: 'all 0.15s' }}
+          style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: isMenuOpen ? 'var(--hover)' : 'transparent', border: 'none', cursor: 'pointer', color: isMenuOpen ? 'var(--text-primary)' : 'var(--text-muted)', padding: '3px 7px', borderRadius: 7, fontSize: 14, lineHeight: 1, letterSpacing: '1px', transition: 'all 0.15s' }}
           onMouseEnter={e => { (e.currentTarget.style.background = 'var(--hover)'); (e.currentTarget.style.color = 'var(--text-primary)') }}
-          onMouseLeave={e => { (e.currentTarget.style.background = isMenuOpen ? 'var(--hover)' : 'rgba(100,80,60,0.1)'); (e.currentTarget.style.color = 'var(--text-secondary)') }}
+          onMouseLeave={e => { (e.currentTarget.style.background = isMenuOpen ? 'var(--hover)' : 'transparent'); (e.currentTarget.style.color = isMenuOpen ? 'var(--text-primary)' : 'var(--text-muted)') }}
         >···</button>
         {isMenuOpen && <NoteMenu note={note} onDelete={() => handleDelete(note.id)} onPin={() => handlePin(note)} onClose={() => setMenuNoteId(null)} />}
       </div>
@@ -320,6 +336,52 @@ export function SidebarWrapper({ children, onSummarize, onQuiz, onRewrite, summa
                   </div>
                 ) : (
                   <>
+                    {sharedNotes.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, padding: '8px 10px 4px', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'DM Sans, sans-serif', display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <svg width="9" height="9" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, opacity: 0.6 }}>
+                            <circle cx="4" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.4"/>
+                            <circle cx="10" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.4"/>
+                            <path d="M1 13c0-2 1.3-3.5 3-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                            <path d="M13 13c0-2-1.3-3.5-3-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                            <path d="M4.5 9.5C5.2 9.2 6 9 7 9s1.8.2 2.5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                          </svg>
+                          Collaboration
+                        </div>
+                        {sharedNotes.map(n => {
+                          const ownedNote = notes.find(own => own.id === n.id) ?? null
+                          const isOwned = ownedNote !== null
+                          const dest = isOwned ? `/notes/${n.id}` : n.token ? `/shared/${n.token}` : null
+                          const isActive = dest ? pathname === dest : false
+                          const isMenuOpen = menuNoteId === n.id
+                          return (
+                            <div key={n.id} style={{ position: 'relative', borderRadius: 12, background: isActive ? 'var(--active-bg)' : 'transparent', margin: '1px 0', border: isActive ? '1px solid var(--active-border)' : '1px solid transparent', transition: 'all 0.15s' }}
+                              onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--hover)' }}
+                              onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                            >
+                              <div onClick={() => dest && router.push(dest)} style={{ padding: isOwned ? '9px 40px 9px 12px' : '9px 12px', cursor: dest ? 'pointer' : 'default', userSelect: 'none' }}>
+                                <div style={{ fontSize: 13, fontWeight: 500, color: isActive ? 'var(--active-text)' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'DM Sans, sans-serif' }}>
+                                  {n.title || 'Untitled'}
+                                </div>
+                                <div style={{ fontSize: 11, color: isActive ? 'var(--active-sub)' : 'var(--text-muted)', marginTop: 2 }}>
+                                  {n.activeUsers} people editing now
+                                </div>
+                              </div>
+                              {isOwned && ownedNote && (
+                                <>
+                                  <button onClick={(e) => { e.stopPropagation(); setMenuNoteId(isMenuOpen ? null : n.id) }}
+                                    style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: isMenuOpen ? 'var(--hover)' : 'transparent', border: 'none', cursor: 'pointer', color: isMenuOpen ? 'var(--text-primary)' : 'var(--text-muted)', padding: '3px 7px', borderRadius: 7, fontSize: 14, lineHeight: 1, letterSpacing: '1px', transition: 'all 0.15s' }}
+                                    onMouseEnter={e => { (e.currentTarget.style.background = 'var(--hover)'); (e.currentTarget.style.color = 'var(--text-primary)') }}
+                                    onMouseLeave={e => { (e.currentTarget.style.background = isMenuOpen ? 'var(--hover)' : 'transparent'); (e.currentTarget.style.color = isMenuOpen ? 'var(--text-primary)' : 'var(--text-muted)') }}
+                                  >···</button>
+                                  {isMenuOpen && <NoteMenu note={ownedNote} onDelete={() => handleDelete(n.id)} onPin={() => handlePin(ownedNote)} onClose={() => setMenuNoteId(null)} />}
+                                </>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </>
+                    )}
                     {pinned.length > 0 && <><div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, padding: '8px 10px 4px', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'DM Sans, sans-serif' }}>Pinned</div>{pinned.map(renderNote)}</>}
                     {unpinned.length > 0 && <><div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, padding: '8px 10px 4px', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'DM Sans, sans-serif' }}>{pinned.length > 0 ? 'Recent' : 'Notes'}</div>{unpinned.map(renderNote)}</>}
                   </>

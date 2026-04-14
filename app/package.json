@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
+    "@deepgram/sdk": "^5.0.0",
     "@google/generative-ai": "^0.24.1",
     "@tiptap/core": "^2.10.0",
     "@tiptap/extension-code-block-lowlight": "^2.10.0",

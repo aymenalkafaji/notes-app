@@ -6,6 +6,8 @@ import TextStyle from '@tiptap/extension-text-style'
 import FontFamily from '@tiptap/extension-font-family'
 import Color from '@tiptap/extension-color'
 import { Extension } from '@tiptap/core'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
 import { useState, useEffect, useRef } from 'react'
 import { useAutoSave } from '@/hooks/useAutoSave'
 import { StyleDropdown, FontSizePicker, FontFamilyPicker, ColorPicker } from '@/components/editor/TextFormatting'
@@ -22,7 +24,7 @@ const FontSize = Extension.create({
 })
 
 function Divider() {
-  return <div style={{ width: 1, height: 26, background: '#E0DDD8', margin: '0 3px', flexShrink: 0 }} />
+  return <div style={{ width: 1, height: 26, background: 'var(--border)', margin: '0 4px', flexShrink: 0 }} />
 }
 
 function TBtn({ onClick, active, title, children }: { onClick: () => void; active?: boolean; title: string; children: React.ReactNode }) {
@@ -30,7 +32,7 @@ function TBtn({ onClick, active, title, children }: { onClick: () => void; activ
   return (
     <button onClick={onClick} title={title}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ width: 36, height: 36, background: active ? '#EED5B5' : hov ? '#EAE7E0' : 'transparent', border: 'none', borderRadius: 8, cursor: 'pointer', color: active ? '#6B3A10' : '#3C3A36', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.1s' }}
+      style={{ width: 36, height: 36, background: active ? 'var(--active-bg)' : hov ? 'var(--hover)' : 'transparent', border: 'none', borderRadius: 8, cursor: 'pointer', color: active ? 'var(--active-text)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.1s' }}
     >{children}</button>
   )
 }
@@ -50,12 +52,54 @@ const Icon = {
   redo: <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><path d="M14 8C14 5.2 11.8 3 9 3 6.6 3 4.6 4.5 3.8 6.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><polyline points="16,5 14,8 11,7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>,
 }
 
-export function SharedEditor({ note, token }: { note: any; token: string }) {
+interface Props {
+  note: any
+  token: string
+  permission: 'view' | 'edit'
+  currentUser?: { id?: string; name?: string | null; email?: string | null; image?: string | null } | null
+}
+
+export function SharedEditor({ note, token, permission }: Props) {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const [title, setTitle] = useState(note.title || '')
   const titleRef = useRef<HTMLTextAreaElement>(null)
 
+  // Presence heartbeat — keeps this user in Redis so COLLABORATION tab stays visible
+  useEffect(() => {
+    const userId = (() => {
+      let id = localStorage.getItem('notewise-uid')
+      if (!id) { id = Math.random().toString(36).slice(2); localStorage.setItem('notewise-uid', id) }
+      return id
+    })()
+    const name = localStorage.getItem('notewise-name') || 'Guest'
+
+    const ping = () => fetch(`/api/notes/${note.id}/presence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, userId }),
+    }).catch(() => {})
+
+    ping()
+    const interval = setInterval(ping, 60_000)
+
+    const leave = () => fetch(`/api/notes/${note.id}/presence`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    }).catch(() => {})
+
+    window.addEventListener('beforeunload', leave)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('beforeunload', leave)
+      // Do NOT delete on unmount — session should persist until TTL (30 min) expires.
+      // Only clear on actual browser/tab close (beforeunload above).
+    }
+  }, [note.id])
+  const isEditable = permission === 'edit'
+
   const autoSaveContent = useAutoSave(async (content) => {
+    if (!isEditable) return
     setSaveStatus('saving')
     await fetch(`/api/share/${token}`, {
       method: 'PATCH',
@@ -66,6 +110,7 @@ export function SharedEditor({ note, token }: { note: any; token: string }) {
   })
 
   const autoSaveTitle = useAutoSave(async (newTitle) => {
+    if (!isEditable) return
     setSaveStatus('saving')
     await fetch(`/api/share/${token}`, {
       method: 'PATCH',
@@ -77,21 +122,20 @@ export function SharedEditor({ note, token }: { note: any; token: string }) {
 
   const editor = useEditor({
     immediatelyRender: false,
+    editable: isEditable,
     extensions: [
-      StarterKit.configure({ codeBlock: { exitOnArrowDown: true } }),
-      Link,
-      TextStyle,
-      FontFamily,
-      Color,
-      FontSize,
+      StarterKit.configure({ codeBlock: { exitOnTripleEnter: false, exitOnArrowDown: true } }),
+      Link, TextStyle, FontFamily, Color, FontSize,
+      TaskList, TaskItem.configure({ nested: true }),
     ],
     content: note.content ?? undefined,
     editorProps: {
       attributes: {
-        style: 'outline: none; min-height: 400px; font-size: 17px; line-height: 1.85; color: #3C3A36; font-family: Georgia, serif; caret-color: #D4956A;',
+        style: 'outline: none; min-height: 400px; font-size: 17px; line-height: 1.9; color: var(--prose-color); font-family: Fraunces, Georgia, serif; caret-color: var(--accent);',
       },
     },
     onUpdate: ({ editor }) => {
+      if (!isEditable) return
       setSaveStatus('unsaved')
       autoSaveContent(editor.getJSON())
     },
@@ -103,7 +147,7 @@ export function SharedEditor({ note, token }: { note: any; token: string }) {
       try {
         const data = JSON.parse(e.data)
         if (data.content && editor && !editor.isFocused) editor.commands.setContent(data.content)
-        if (data.title) setTitle(data.title)
+        if (data.title && document.activeElement?.tagName !== 'TEXTAREA') setTitle(data.title)
       } catch {}
     }
     return () => es.close()
@@ -116,51 +160,126 @@ export function SharedEditor({ note, token }: { note: any; token: string }) {
     }
   }, [title])
 
+  const glass: React.CSSProperties = {
+    background: 'var(--glass-bg)',
+    backdropFilter: 'blur(28px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+    border: '1px solid var(--glass-border)',
+    boxShadow: 'var(--glass-shadow-lg)',
+  }
+
+  // Permission badge
+  const badge = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, background: isEditable ? 'var(--active-bg)' : 'var(--hover)', border: `1px solid ${isEditable ? 'var(--active-border)' : 'var(--border)'}`, flexShrink: 0 }}>
+      {isEditable ? (
+        <svg width="10" height="10" viewBox="0 0 11 11" fill="none"><path d="M7.5 1.5L9.5 3.5L4 9H2V7L7.5 1.5Z" stroke="var(--accent)" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+      ) : (
+        <svg width="10" height="10" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="4" r="2" stroke="var(--text-muted)" strokeWidth="1.2"/><path d="M1 10c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4" stroke="var(--text-muted)" strokeWidth="1.2" strokeLinecap="round"/></svg>
+      )}
+      <span style={{ fontSize: 11, fontWeight: 600, color: isEditable ? 'var(--accent)' : 'var(--text-muted)', letterSpacing: '0.03em', fontFamily: 'DM Sans, sans-serif' }}>
+        {isEditable ? 'Can edit' : 'View only'}
+      </span>
+    </div>
+  )
+
+  // Grayed-out mic button (owner-only feature)
+  const disabledMic = (
+    <button
+      title="Transcription is only available to the note owner"
+      disabled
+      style={{ width: 36, height: 36, borderRadius: 8, border: 'none', cursor: 'default', background: 'transparent', color: 'var(--text-hint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: 0.4 }}
+    >
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <rect x="6" y="1" width="6" height="9" rx="3" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M3.5 9.5c0 3 2.5 5 5.5 5s5.5-2 5.5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="9" y1="14.5" x2="9" y2="17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="6.5" y1="17" x2="11.5" y2="17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    </button>
+  )
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 57px)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', height: 56, borderBottom: '0.5px solid #E0DDD8', background: '#FDFBF8', gap: 3, flexShrink: 0, overflowX: 'visible', position: 'relative', zIndex: 200 }}>
-        <StyleDropdown editor={editor} />
-        <FontSizePicker editor={editor} />
-        <FontFamilyPicker editor={editor} />
-        <ColorPicker editor={editor} />
-        <Divider />
-        <TBtn onClick={() => editor?.chain().focus().toggleBold().run()} active={editor?.isActive('bold')} title="Bold">{Icon.bold}</TBtn>
-        <TBtn onClick={() => editor?.chain().focus().toggleItalic().run()} active={editor?.isActive('italic')} title="Italic">{Icon.italic}</TBtn>
-        <TBtn onClick={() => editor?.chain().focus().toggleStrike().run()} active={editor?.isActive('strike')} title="Strikethrough">{Icon.strike}</TBtn>
-        <TBtn onClick={() => editor?.chain().focus().toggleCode().run()} active={editor?.isActive('code')} title="Inline code">{Icon.code}</TBtn>
-        <LinkButton editor={editor} />
-        <Divider />
-        <TBtn onClick={() => editor?.chain().focus().toggleBulletList().run()} active={editor?.isActive('bulletList')} title="Bullet list">{Icon.bullet}</TBtn>
-        <TBtn onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={editor?.isActive('orderedList')} title="Numbered list">{Icon.numbered}</TBtn>
-        <TBtn onClick={() => editor?.chain().focus().toggleBlockquote().run()} active={editor?.isActive('blockquote')} title="Quote">{Icon.quote}</TBtn>
-        <TBtn onClick={() => { if (editor?.isActive('codeBlock')) { editor.chain().focus().toggleCodeBlock().run(); editor.chain().focus().insertContent({ type: 'paragraph' }).run() } else { editor?.chain().focus().toggleCodeBlock().run() } }} active={editor?.isActive('codeBlock')} title="Code block">{Icon.codeblock}</TBtn>
-        <TBtn onClick={() => editor?.chain().focus().setHorizontalRule().run()} title="Divider">{Icon.hr}</TBtn>
-        <Divider />
-        <TBtn onClick={() => editor?.chain().focus().unsetAllMarks().clearNodes().run()} title="Clear formatting">{Icon.clear}</TBtn>
-        <TBtn onClick={() => editor?.chain().focus().undo().run()} title="Undo">{Icon.undo}</TBtn>
-        <TBtn onClick={() => editor?.chain().focus().redo().run()} title="Redo">{Icon.redo}</TBtn>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 8, height: '100%' }}>
+
+      {/* TOOLBAR ISLAND */}
+      <div style={{ ...glass, borderBottom: '1px solid transparent', borderRadius: 20, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', height: 56, gap: 3, position: 'relative', zIndex: 50 }}>
+        {isEditable ? (
+          <>
+            <StyleDropdown editor={editor} />
+            <FontSizePicker editor={editor} />
+            <FontFamilyPicker editor={editor} />
+            <ColorPicker editor={editor} />
+            <Divider />
+            <TBtn onClick={() => editor?.chain().focus().toggleBold().run()} active={editor?.isActive('bold')} title="Bold">{Icon.bold}</TBtn>
+            <TBtn onClick={() => editor?.chain().focus().toggleItalic().run()} active={editor?.isActive('italic')} title="Italic">{Icon.italic}</TBtn>
+            <TBtn onClick={() => editor?.chain().focus().toggleStrike().run()} active={editor?.isActive('strike')} title="Strikethrough">{Icon.strike}</TBtn>
+            <TBtn onClick={() => editor?.chain().focus().toggleCode().run()} active={editor?.isActive('code')} title="Inline code">{Icon.code}</TBtn>
+            <LinkButton editor={editor} />
+            <Divider />
+            <TBtn onClick={() => editor?.chain().focus().toggleBulletList().run()} active={editor?.isActive('bulletList')} title="Bullet list">{Icon.bullet}</TBtn>
+            <TBtn onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={editor?.isActive('orderedList')} title="Numbered list">{Icon.numbered}</TBtn>
+            <TBtn onClick={() => editor?.chain().focus().toggleBlockquote().run()} active={editor?.isActive('blockquote')} title="Quote">{Icon.quote}</TBtn>
+            <TBtn onClick={() => { if (editor?.isActive('codeBlock')) { editor.chain().focus().toggleCodeBlock().run(); editor.chain().focus().insertContent({ type: 'paragraph' }).run() } else { editor?.chain().focus().toggleCodeBlock().run() } }} active={editor?.isActive('codeBlock')} title="Code block">{Icon.codeblock}</TBtn>
+            <TBtn onClick={() => editor?.chain().focus().setHorizontalRule().run()} title="Divider">{Icon.hr}</TBtn>
+            <Divider />
+            <TBtn onClick={() => editor?.chain().focus().unsetAllMarks().clearNodes().run()} title="Clear formatting">{Icon.clear}</TBtn>
+            <TBtn onClick={() => editor?.chain().focus().undo().run()} title="Undo">{Icon.undo}</TBtn>
+            <TBtn onClick={() => editor?.chain().focus().redo().run()} title="Redo">{Icon.redo}</TBtn>
+          </>
+        ) : (
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'DM Sans, sans-serif' }}>
+            {note.title || 'Untitled'}
+          </span>
+        )}
+
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: '#B0ADA6', whiteSpace: 'nowrap' }}>
-          {saveStatus === 'saving' ? '● Saving' : saveStatus === 'saved' ? '✓ Saved' : '○ Unsaved'}
-        </span>
+
+        {disabledMic}
+
+        {isEditable && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', marginRight: 6, fontFamily: 'DM Sans, sans-serif' }}>
+            {saveStatus === 'saving' ? '● Saving' : saveStatus === 'saved' ? '✓ Saved' : '○ Unsaved'}
+          </span>
+        )}
+
+        {/* Theme toggle */}
+        <TBtn onClick={() => {
+          const next = document.documentElement.getAttribute('data-theme') !== 'dark'
+          document.documentElement.setAttribute('data-theme', next ? 'dark' : 'light')
+          localStorage.setItem('theme', next ? 'dark' : 'light')
+        }} title="Toggle dark mode">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M15 11A7 7 0 016 3a7 7 0 100 12 7 7 0 009-4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+          </svg>
+        </TBtn>
+
+        <Divider />
+        {badge}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        <div style={{ maxWidth: 760, margin: '0 auto', padding: '48px 48px 120px' }}>
-          <textarea
-            ref={titleRef}
-            value={title}
-            onChange={(e) => { setTitle(e.target.value); setSaveStatus('unsaved'); autoSaveTitle(e.target.value) }}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); editor?.commands.focus('start') } }}
-            placeholder="Untitled"
-            rows={1}
-            style={{ width: '100%', fontSize: 38, fontWeight: 700, color: '#1C1A17', outline: 'none', border: 'none', background: 'transparent', fontFamily: 'Georgia, serif', letterSpacing: '-0.5px', marginBottom: 28, lineHeight: 1.2, display: 'block', resize: 'none', overflow: 'hidden', padding: 0, caretColor: '#D4956A' }}
-          />
-          <div onClick={() => editor?.commands.focus()}>
-            <EditorContent editor={editor} />
-          </div>
-          <div style={{ marginTop: 64, paddingTop: 24, borderTop: '0.5px solid #E0DDD8', fontSize: 12, color: '#B0ADA6' }}>
-            Shared via Notewise — changes save automatically
+      {/* EDITOR BODY ISLAND */}
+      <div style={{ ...glass, borderTop: '1px solid transparent', borderRadius: 20, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ maxWidth: 780, margin: '0 auto', padding: '52px 64px 160px' }}>
+            {isEditable ? (
+              <textarea
+                ref={titleRef}
+                value={title}
+                onChange={(e) => { setTitle(e.target.value); setSaveStatus('unsaved'); autoSaveTitle(e.target.value) }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); editor?.commands.focus('start') } }}
+                placeholder="Note title"
+                rows={1}
+                style={{ width: '100%', fontSize: 42, fontWeight: 600, color: 'var(--title-color)', outline: 'none', border: 'none', background: 'transparent', fontFamily: 'Fraunces, Georgia, serif', letterSpacing: '-0.6px', marginBottom: 32, lineHeight: 1.15, display: 'block', resize: 'none', overflow: 'hidden', padding: 0, caretColor: 'var(--accent)' }}
+              />
+            ) : (
+              <h1 style={{ fontSize: 42, fontWeight: 600, color: 'var(--title-color)', fontFamily: 'Fraunces, Georgia, serif', letterSpacing: '-0.6px', marginBottom: 32, lineHeight: 1.15 }}>
+                {title || 'Untitled'}
+              </h1>
+            )}
+
+            <div onClick={() => isEditable && editor?.commands.focus()}>
+              <EditorContent editor={editor} />
+            </div>
           </div>
         </div>
       </div>

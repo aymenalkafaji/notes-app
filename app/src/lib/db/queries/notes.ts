@@ -52,3 +52,4 @@ export async function deleteShareLink(id: string) {
 export async function getShareLinksByNote(noteId: string) {
   return db.select().from(shareLinks).where(eq(shareLinks.noteId, noteId))
 }
+

@@ -23,7 +23,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const key = `presence:${id}:${userId}`
-  await redis.setex(key, 15, JSON.stringify(user))
+  await redis.setex(key, 1800, JSON.stringify(user))
 
   const allKeys = await redis.keys(`presence:${id}:*`)
   const allUsers = await Promise.all(allKeys.map(k => redis.get(k)))

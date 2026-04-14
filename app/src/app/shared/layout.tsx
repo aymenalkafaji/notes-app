@@ -1,6 +1,6 @@
 export default function SharedLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ minHeight: '100vh', overflowY: 'auto', position: 'fixed', inset: 0 }}>
+    <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', position: 'relative' }}>
       {children}
     </div>
   )
